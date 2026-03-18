@@ -1,0 +1,37 @@
+{
+  "name": "@giszhc/arcgis-to-geojson",
+  "version": "0.0.1",
+  "type": "module",
+  "files": [
+    "dist",
+    "types"
+  ],
+  "module": "dist/arcgis-to-geojson.js",
+  "types": "types/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/giszhc/arcgis-to-geojson.git"
+  },
+  "bugs": {
+    "url": "https://github.com/giszhc/arcgis-to-geojson/issues"
+  },
+  "keywords": [
+    "ArcGIS",
+    "geoJSON",
+    "arcgisJSON"
+  ],
+  "homepage": "https://github.com/giszhc/arcgis-to-geojson#readme",
+  "scripts": {
+    "dev": "vite",
+    "build:types": "tsc -p tsconfig.build.json",
+    "build": "vite build && pnpm run build:types",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vite": "^7.2.4"
+  }
+}
