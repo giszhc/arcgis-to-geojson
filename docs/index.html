@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArcGIS JSON ↔ GeoJSON 转换器</title>
+    <style>
+        * {
+            margin: 0;
+          padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            width: 100%;
+            height: 100vh;
+     padding: 0;
+            margin: 0;
+            overflow: hidden;
+        }
+        
+        /* 主窗口 - MacOS 风格 */
+        .window {
+            width: calc(100% - 40px);
+            max-width: 1400px;
+     background: rgba(255, 255, 255, 0.85);
+     backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-radius: 12px;
+            box-shadow: 
+                0 30px 80px rgba(0, 0, 0, 0.25),
+                0 1px 3px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            animation: windowOpen 0.3s ease-out;
+            margin: 20px auto;
+            height: calc(100vh - 40px);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        @keyframes windowOpen {
+            from {
+                opacity: 0;
+                transform: scale(0.95) translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+        
+        /* 标题栏 */
+        .title-bar {
+     background: linear-gradient(to bottom, #f6f6f6, #e8e8e8);
+            border-bottom: 1px solid #d0d0d0;
+     padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .traffic-lights {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .traffic-light {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 0.5px solid rgba(0, 0, 0, 0.1);
+        }
+        
+        .traffic-light.close {
+     background: #ff5f57;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        
+        .traffic-light.close:hover {
+            opacity: 0.7;
+        }
+        
+        .traffic-light.minimize {
+     background: #febc2e;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        
+        .traffic-light.minimize:hover {
+            opacity: 0.7;
+        }
+        
+        .traffic-light.maximize {
+     background: #28c840;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        
+        .traffic-light.maximize:hover {
+            opacity: 0.7;
+        }
+        
+        .window-title {
+            flex: 1;
+            text-align: center;
+     color: #333;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+        
+        /* 新增：转换器特定样式 */
+        .converter-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .converter-panel {
+         background: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-radius: 10px;
+         padding: 20px;
+            transition: all 0.2s ease;
+        }
+        
+        .converter-panel:hover {
+         background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        
+        .converter-panel h3 {
+            font-size: 16px;
+            font-weight: 600;
+         color: #333;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        textarea {
+            width: 100%;
+            height: 200px;
+         padding: 12px;
+         background: rgba(255, 255, 255, 0.9);
+            border: 2px solid rgba(102, 126, 234, 0.3);
+            border-radius: 8px;
+            resize: vertical;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+            font-size: 12px;
+         color: #333;
+            transition: all 0.2s ease;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: rgba(102, 126, 234, 0.7);
+         background: rgba(255, 255, 255, 1);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .convert-button-wrapper {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .convert-button {
+         background: linear-gradient(135deg, #667eea, #764ba2);
+         color: white;
+            border: none;
+         padding: 14px 40px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .convert-button::before {
+         content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+         background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            transition: left 0.5s;
+        }
+        
+        .convert-button:hover::before {
+            left: 100%;
+        }
+        
+        .convert-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.45);
+        }
+        
+        .convert-button:active {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+        }
+        
+        .file-upload-wrapper {
+            margin: 15px 0;
+        }
+        
+        .file-upload-label {
+            display: inline-block;
+         background: linear-gradient(135deg, #667eea, #764ba2);
+         color: white;
+         padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.25);
+        }
+        
+        .file-upload-label:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.35);
+        }
+        
+        input[type="file"] {
+            display: none;
+        }
+        
+        .example-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .example-btn {
+         background: rgba(102, 126, 234, 0.1);
+         color: #667eea;
+            border: 1px solid rgba(102, 126, 234, 0.3);
+         padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .example-btn:hover {
+         background: rgba(102, 126, 234, 0.2);
+            border-color: rgba(102, 126, 234, 0.5);
+            transform: translateY(-1px);
+        }
+        
+        .content {
+    padding: 30px;
+           flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+        }
+        
+        .content::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .content::-webkit-scrollbar-track {
+         background: transparent;
+        }
+        
+        .content::-webkit-scrollbar-thumb {
+         background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+        }
+        
+        .content::-webkit-scrollbar-thumb:hover {
+         background: rgba(0, 0, 0, 0.3);
+        }
+        
+        /* 头部 */
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 32px;
+            font-weight: 700;
+         background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+         background-clip: text;
+            margin-bottom: 8px;
+        }
+        
+        .subtitle {
+         color: #666;
+            font-size: 15px;
+        }
+        
+        /* 信息提示框 */
+        .info-box {
+         background: rgba(102, 126, 234, 0.08);
+            border-left: 4px solid #667eea;
+            border-radius: 8px;
+         padding: 16px 20px;
+            margin-bottom: 25px;
+        }
+        
+        .info-box strong {
+         color: #667eea;
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .info-box p {
+         color: #555;
+            font-size: 13px;
+            line-height: 1.8;
+        }
+        
+        /* 功能区块 */
+        .section {
+         background: rgba(255, 255, 255, 0.6);
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-radius: 10px;
+         padding: 24px;
+            margin-bottom: 20px;
+            transition: all 0.2s ease;
+        }
+        
+        .section:hover {
+         background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        
+        .section h2 {
+            font-size: 18px;
+            font-weight: 600;
+         color: #333;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .section-icon {
+            font-size: 20px;
+        }
+        
+        /* 按钮组 */
+        .button-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 15px;
+        }
+        
+        button {
+         background: linear-gradient(135deg, #667eea, #764ba2);
+         color: white;
+            border: none;
+         padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.25);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        button::before {
+         content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+         background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            transition: left 0.5s;
+        }
+        
+        button:hover::before {
+            left: 100%;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.35);
+        }
+        
+        button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.25);
+        }
+        
+        /* 文件输入 */
+        .file-input-wrapper {
+            position: relative;
+            margin: 15px 0;
+        }
+        
+        input[type="file"] {
+            width: 100%;
+         padding: 14px 18px;
+         background: rgba(255, 255, 255, 0.9);
+            border: 2px dashed rgba(102, 126, 234, 0.4);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+         color: #555;
+        }
+        
+        input[type="file"]:hover {
+            border-color: rgba(102, 126, 234, 0.7);
+         background: rgba(102, 126, 234, 0.05);
+        }
+        
+        /* 结果区域 */
+        .result {
+         background: rgba(250, 250, 250, 0.8);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            border-radius: 8px;
+         padding: 16px;
+            margin-top: 16px;
+            font-size: 13px;
+        }
+        
+        .result h4 {
+         color: #667eea;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        
+        .result pre {
+         background: rgba(255, 255, 255, 0.7);
+         padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+            line-height: 1.6;
+        }
+        
+        .success {
+         color: #34c759;
+            font-weight: 600;
+        }
+        
+        .error {
+         color: #ff3b30;
+            font-weight: 600;
+        }
+        
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .window {
+                width: calc(100% - 20px);
+                margin: 10px auto;
+            }
+            
+            .content {
+             padding: 20px 15px;
+            }
+            
+            .button-group {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+  <script type="module" crossorigin src="./assets/main-B4Lt_CAK.js"></script>
+</head>
+<body>
+    <div class="window">
+        <!-- MacOS 风格标题栏 -->
+        <div class="title-bar">
+            <div class="traffic-lights">
+                <div class="traffic-light close"></div>
+                <div class="traffic-light minimize"></div>
+                <div class="traffic-light maximize"></div>
+            </div>
+            <div class="window-title">ArcGIS JSON ↔ GeoJSON 转换器</div>
+        </div>
+        
+        <!-- 内容区域 -->
+        <div class="content">
+            <div class="header">
+                <h1>🔄 ArcGIS JSON ↔ GeoJSON 转换器</h1>
+                <p class="subtitle">双向转换工具 - 支持点、线、面、要素集合</p>
+            </div>
+            
+            <div class="info-box">
+                <strong>💡 使用指南</strong>
+                <p>在左侧输入 ArcGIS JSON 或右侧输入 GeoJSON，点击转换按钮即可完成格式转换。支持直接粘贴 JSON 或从文件导入。</p>
+            </div>
+            
+            <!-- 转换区域 -->
+            <div class="converter-grid">
+                <!-- ArcGIS JSON 输入 -->
+                <div class="converter-panel">
+                    <h3><span style="font-size: 18px;">📍</span> ArcGIS JSON 输入</h3>
+                    <textarea id="arcgisInput" placeholder="在此粘贴 ArcGIS JSON...\n\n示例：\n{\n  \"x\": 116.4,\n  \"y\": 39.9\n}"></textarea>
+                    
+                    <div class="file-upload-wrapper">
+                        <label for="arcgisFile" class="file-upload-label">
+                            📁 导入 ArcGIS JSON 文件
+                        </label>
+                        <input type="file" id="arcgisFile" accept=".json,.geojson">
+                    </div>
+                    
+                    <div class="example-buttons">
+                        <button class="example-btn" onclick="loadExample('point')">点示例</button>
+                        <button class="example-btn" onclick="loadExample('polyline')">线示例</button>
+                        <button class="example-btn" onclick="loadExample('polygon')">面示例</button>
+                        <button class="example-btn" onclick="loadExample('feature')">要素示例</button>
+                    </div>
+                </div>
+                
+                <!-- GeoJSON 输入 -->
+                <div class="converter-panel">
+                    <h3><span style="font-size: 18px;">🌍</span> GeoJSON 输入</h3>
+                    <textarea id="geojsonInput" placeholder="在此粘贴 GeoJSON...\n\n示例：\n{\n  \"type\": \"Point\",\n  \"coordinates\": [116.4, 39.9]\n}"></textarea>
+                    
+                    <div class="file-upload-wrapper">
+                        <label for="geojsonFile" class="file-upload-label">
+                            📁 导入 GeoJSON 文件
+                        </label>
+                        <input type="file" id="geojsonFile" accept=".json,.geojson">
+                    </div>
+                    
+                    <div class="example-buttons">
+                        <button class="example-btn" onclick="loadGeoExample('point')">点示例</button>
+                        <button class="example-btn" onclick="loadGeoExample('linestring')">线示例</button>
+                        <button class="example-btn" onclick="loadGeoExample('polygon')">面示例</button>
+                        <button class="example-btn" onclick="loadGeoExample('feature')">要素示例</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 转换按钮 -->
+            <div class="convert-button-wrapper">
+                <button class="convert-button" onclick="convertArcGISToGeoJSON()">
+                    ⬇️ ArcGIS JSON → GeoJSON
+                </button>
+                <button class="convert-button" onclick="convertGeoJSONToArcGIS()" style="margin-top: 10px;">
+                    ⬆️ GeoJSON → ArcGIS JSON
+                </button>
+            </div>
+            
+            <!-- 结果区域 -->
+            <div class="section">
+                <h2><span class="section-icon">✨</span> 转换结果</h2>
+                <div class="result" id="convertResult">
+                    <p style="color: #999; text-align: center;">转换结果将显示在这里...</p>
+                </div>
+                <div style="text-align: center; margin-top: 15px;" id="downloadWrapper" hidden>
+                    <button class="convert-button" onclick="downloadResult()" style="padding: 10px 30px; font-size: 14px;">
+                        💾 下载结果文件
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 注意事项 -->
+            <div class="section">
+                <h2><span class="section-icon">ℹ️</span> 注意事项</h2>
+                <div style="font-size: 13px; line-height: 1.8; color: #555;">
+                    <p><strong>坐标系：</strong>转换后的 GeoJSON 默认为 WGS84 坐标系（EPSG:4326）</p>
+                    <p><strong>环方向：</strong>ArcGIS 外环顺时针，GeoJSON 外环逆时针，库会自动处理</p>
+                    <p><strong>ID 映射：</strong>默认使用 OBJECTID 或 FID 作为要素 ID</p>
+                    <p><strong>三维坐标：</strong>支持 Z 坐标（高程）的转换</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+</body>
+</html>
